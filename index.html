@@ -57,12 +57,19 @@
           <option>上</option><option>左</option><option>下</option><option>右</option>
         </select>
       </label>
+      <label>整体旋转
+        <select id="spin">
+          <option value="0" selected>无</option>
+          <option value="1">90</option>
+          <option value="2">180</option>
+          <option value="3">270</option>
+        </select>
+      </label>
       <label><input type="checkbox" id="trim" checked> 裁掉四周留白</label>
       <label>预览
         <select id="mode">
           <option value="export" selected>导出结果</option>
           <option value="render">原始渲染</option>
-          <option value="cmp">并排对照</option>
         </select>
       </label>
     </div>
@@ -11698,11 +11705,40 @@
     };
   }
 
+  // 单文件工具/rotate.js
+  function rotateSchematicCW90(s) {
+    const width = s.width;
+    for (const tile of s.tiles) {
+      const x = tile.x;
+      const y = tile.y;
+      tile.x = y;
+      tile.y = width - 1 - x - (tile.block.size % 2 ? 0 : 1);
+      tile.rotation = (tile.rotation + 3) % 4;
+      rotateOffsets(tile.config);
+    }
+    s.width = s.height;
+    s.height = width;
+    s.base64 = void 0;
+    return s;
+  }
+  function rotateOffsets(config) {
+    if (Array.isArray(config)) {
+      for (const item of config) rotateOffsets(item);
+      return;
+    }
+    if (!config || typeof config.add !== "function") return;
+    if (typeof config.x !== "number" || typeof config.y !== "number") return;
+    const dx = config.x;
+    config.x = config.y;
+    config.y = -dx;
+  }
+
   // 单文件工具/app.js
   var TILE = 32;
   var GRID = 8;
   var SCALE_MAX = 8;
   var ORIENTATIONS = { \u8DDF\u968F\u56FE\u7EB8: null, \u4E0A: 0, \u5DE6: 1, \u4E0B: 2, \u53F3: 3 };
+  var SPIN_TAGS = ["", "_90", "_180", "_270"];
   var palette = [];
   var lut = null;
   var last = null;
@@ -11757,7 +11793,7 @@
     if (!last) return;
     const maxPx = Math.min(920, window.innerWidth - 80);
     const add = (src, label, pxW, pxH) => {
-      const scale = Math.max(1, Math.min(8, Math.floor(maxPx / (mode === "cmp" ? 2 : 1) / Math.max(src.width, src.height))));
+      const scale = Math.max(1, Math.min(8, Math.floor(maxPx / Math.max(src.width, src.height))));
       const wrap = document.createElement("figure");
       const cap = document.createElement("figcaption");
       cap.textContent = `${label} ${pxW}\xD7${pxH}px`;
@@ -11766,10 +11802,9 @@
       wrap.append(cap, c);
       host.appendChild(wrap);
     };
-    if (mode === "export" || mode === "cmp")
-      add(last.exportCanvas, `\u5BFC\u51FA\u7ED3\u679C\uFF08\u6BCF\u683C ${last.px} px\uFF09`, last.pngWidth, last.pngHeight);
-    if (mode === "render" || mode === "cmp")
+    if (mode === "render")
       add(last.renderCanvas, "\u539F\u59CB\u6E32\u67D3\uFF08\u6BCF\u683C 32 px\uFF09", last.renderWidth, last.renderHeight);
+    else add(last.exportCanvas, `\u5BFC\u51FA\u7ED3\u679C\uFF08\u6BCF\u683C ${last.px} px\uFF09`, last.pngWidth, last.pngHeight);
     el("previewRow").hidden = false;
   }
   function safeName(name) {
@@ -11800,6 +11835,8 @@
           "\u56FE\u7EB8\u4EE3\u7801\u6CA1\u80FD\u8BFB\u51FA\u6765\uFF0C\u591A\u534A\u662F\u6CA1\u590D\u5236\u5168\u6216\u4E2D\u95F4\u88AB\u6539\u8FC7\u3002\u56DE\u6E38\u620F\u91CC\u9009\u4E2D\u5EFA\u7B51\u91CD\u65B0 Ctrl+C\uFF0C\u6574\u6BB5\u7C98\u8FDB\u6765\uFF08\u6B63\u5E38\u4EE5 bXNjaA \u5F00\u5934\uFF09\u3002"
         );
       }
+      const spin = Math.min(3, Math.max(0, +el("spin").value | 0));
+      for (let i = 0; i < spin; i++) rotateSchematicCW90(s);
       const size = Math.max(s.width, s.height) * TILE + 2 * TILE;
       const options = { size, background: true, assetsBaseUrl: "inline/" };
       const rot = ORIENTATIONS[el("rot").value];
@@ -11827,13 +11864,13 @@
         `<b>${escapeHtml(s.name)}</b> ${s.width}\xD7${s.height} \u683C \xB7 ${s.tiles.length} \u4E2A\u5EFA\u7B51`,
         `\u5BFC\u51FA <b>${png}\xD7${pnh}</b> px\uFF08\u6BCF\u683C ${GRID * scale} \u50CF\u7D20\uFF0C\u500D\u6570 \xD7${scale}\uFF09`,
         `\u7528\u8272 ${st.used.length} \u79CD \xB7 \u5438\u9644\u5230 wp \u8272\u8868 ${st.snapped}/${st.visible} \u683C\uFF08${pct}%\uFF09\xB7 \u534A\u900F\u660E ${st.semi} \u683C`,
-        `\u671D\u5411 ${rot === null ? "\u8DDF\u968F\u56FE\u7EB8" : el("rot").value} \xB7 \u7559\u767D ${trim2 ? "\u5DF2\u88C1\u6389" : "\u4FDD\u7559"}`
+        `\u70AE\u5854\u671D\u5411 ${rot === null ? "\u8DDF\u968F\u56FE\u7EB8" : el("rot").value} \xB7 \u6574\u4F53\u65CB\u8F6C ${el("spin").selectedOptions[0].textContent} \xB7 \u7559\u767D ${trim2 ? "\u5DF2\u88C1\u6389" : "\u4FDD\u7559"}`
       ].join("<br>");
       el("result").hidden = false;
       renderLinks([
         {
           label: "\u4E0B\u8F7D PNG",
-          name: `${safeName(s.name)}_${GRID * scale}x${trim2 ? "_\u88C1\u8FB9" : ""}.png`,
+          name: `${safeName(s.name)}_${GRID * scale}x${trim2 ? "_\u88C1\u8FB9" : ""}${SPIN_TAGS[spin]}.png`,
           blob: pngBlob
         }
       ]);
